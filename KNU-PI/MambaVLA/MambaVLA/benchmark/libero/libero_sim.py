@@ -10,6 +10,10 @@ import multiprocessing as mp
 # from .base_sim import BaseSim
 # from libero.libero.envs import *
 from tqdm import tqdm
+import sys
+if "/Data/pilab/LIBERO" not in sys.path:
+    sys.path.insert(0, "/Data/pilab/LIBERO")
+
 from libero.libero import benchmark
 from libero.libero.envs import OffScreenRenderEnv
 from colorama import init, Fore, Style, Back

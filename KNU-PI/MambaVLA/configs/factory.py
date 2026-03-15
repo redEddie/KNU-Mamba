@@ -127,10 +127,10 @@ def create_model(config: MainConfig) -> Any:
     return model
 
 
-def create_trainer(config: MainConfig) -> Any:
+def create_trainer(config: MainConfig, resume_checkpoint_path: str = None) -> Any:
     """Create a trainer from the main configuration."""
     trainer_config = config.trainer
-    
+
     # Create dataset directly with only the required parameters
     from MambaVLA.benchmark.libero.libero_dataset import LiberoDataset
     from pathlib import Path
@@ -144,7 +144,7 @@ def create_trainer(config: MainConfig) -> Any:
         chunck_size=config.chunck_size,
         demos_per_task=config.dataset.demos_per_task
     )
-    
+
     # Create the trainer directly with individual parameters from sub-configurations
     from MambaVLA.main import Trainer
     trainer = Trainer(
@@ -161,9 +161,10 @@ def create_trainer(config: MainConfig) -> Any:
         observation_sequence_length=trainer_config.perception_seq_len,
         ema_decay_rate=trainer_config.decay_ema,
         enable_ema=trainer_config.if_use_ema,
-        checkpoint_frequency=trainer_config.save_every_n_epochs
+        checkpoint_frequency=trainer_config.save_every_n_epochs,
+        resume_checkpoint_path=resume_checkpoint_path
     )
-    
+
     return trainer
 
 

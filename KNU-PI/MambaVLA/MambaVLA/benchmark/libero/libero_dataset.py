@@ -51,9 +51,7 @@ class LiberoDataset():
         data_embs = []
         actions = []
         masks = []
-        agentview_rgb = []
-        eye_in_hand_rgb = []
-
+        self.dataset_metadata = []
         all_states = []
 
         file_list = os.listdir(self.data_dir)
@@ -64,91 +62,55 @@ class LiberoDataset():
 
             filename = os.path.basename(file).split('.')[0][:-5]
             task_emb = tasks[filename]
+            file_path = os.path.join(self.data_dir, file)
 
-            f = h5py.File(os.path.join(self.data_dir, file), 'r')
+            f = h5py.File(file_path, 'r')
 
-            log.info("Loading demo: {}".format(file))
+            log.info("Loading metadata for demo: {}".format(file))
 
             demo_keys_list = list(f["data"].keys())
-
             indices = np.argsort([int(elem[5:]) for elem in demo_keys_list])
 
-            # load the states and actions in demos according to demo_keys_list
             for i in indices[start_idx: start_idx + demos_per_task]:
-
                 demo_name = demo_keys_list[i]
                 demo = f["data"][demo_name]
                 demo_length = demo.attrs["num_samples"]
 
-                # zero_states = np.zeros((1, self.max_len_data, self.state_dim), dtype=np.float32)
                 zero_actions = np.zeros((1, self.max_len_data, self.action_dim), dtype=np.float32)
-                # zero_rewards = np.zeros((1, self.max_len_data), dtype=np.float32)
-                # zero_dones = np.zeros((1, self.max_len_data), dtype=np.float32)
                 zero_mask = np.zeros((1, self.max_len_data), dtype=np.float32)
 
-                # states_data = demo['states'][:]
                 action_data = demo['actions'][:]
-                # rewards_data = demo['rewards'][:]
-                # dones_data = demo['dones'][:]
 
-                # zero_states[0, :demo_length, :] = states_data  # would be T0, ...,Tn-1, Tn, 0, 0
                 zero_actions[0, :demo_length, :] = action_data
-                # zero_rewards[0, :demo_length] = rewards_data
-                # zero_dones[0, :demo_length] = dones_data
                 zero_mask[0, :demo_length] = 1
-
-                # the_last_state = states_data[-1][:]
-                the_last_action = action_data[-1][:]
-                # the_last_reward = rewards_data[-1]
-                # the_last_done = dones_data[-1]
-
-                # zero_modelview = np.zeros((self.max_len_data, H, W, C), dtype=np.float32)
-                # zero_inhand = np.zeros((self.max_len_data, H, W, C), dtype=np.float32)
-                model_view = demo['obs']['agentview_rgb'][:]
-                eye_in_hand = demo['obs']['eye_in_hand_rgb'][:]
 
                 joint_states = demo['obs']['joint_states'][:]
                 gripper_states = demo['obs']['gripper_states'][:]
-
                 robot_states = np.concatenate((joint_states, gripper_states), axis=-1)
 
-                # test_img = model_view[0]
-                # test_img = test_img[::-1, :, :]
-                # test_img = cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR)
-                # cv2.imshow("test_img", test_img)
-                # cv2.waitKey(0)
-
-                # states.append(zero_states)
                 actions.append(zero_actions)
-                # rewards.append(zero_rewards)
-                # dones.append(zero_dones)
                 masks.append(zero_mask)
-
-                agentview_rgb.append(model_view)
-                eye_in_hand_rgb.append(eye_in_hand)
-
                 all_states.append(robot_states)
-
                 data_embs.append(task_emb)
+                
+                # Store metadata for lazy loading instead of the actual images
+                self.dataset_metadata.append({
+                    "file_path": file_path,
+                    "demo_name": demo_name
+                })
 
             f.close()
 
-        # self.states = torch.from_numpy(np.concatenate(states)).float()
-        self.actions = torch.from_numpy(np.concatenate(actions)).float()  # shape: B, T, D
-
-        self.agentview_rgb = agentview_rgb
-        self.eye_in_hand_rgb = eye_in_hand_rgb
+        self.actions = torch.from_numpy(np.concatenate(actions)).float()
 
         self.all_states = all_states
-
         self.data_embs = data_embs
         self.tasks = tasks
-
-        # self.rewards = torch.from_numpy(np.concatenate(rewards)).float()
-        # self.dones = torch.from_numpy(np.concatenate(dones)).float()
         self.masks = torch.from_numpy(np.concatenate(masks)).float()
 
-        self.num_data = len(self.agentview_rgb)
+        self.num_data = len(self.dataset_metadata)
+
+        self.num_data = len(self.dataset_metadata)
 
         self.slices = self.get_slices()
 
@@ -186,13 +148,18 @@ class LiberoDataset():
     def get_all_observations(self):
         """
         Returns all actions from all trajectories, concatenated on dim 0 (time).
+        Notice: this reads directly from HDF5 lazily. Should be used sparingly or completely removed if not needed.
         """
+        print("Warning: get_all_observations reads all data from disk synchronously.")
         result = []
-        # mask out invalid observations
-        for i in range(len(self.masks)):
+        for i in range(self.num_data):
             T = int(self.masks[i].sum().item())
-            result.append(self.agentview_rgb[i, :T, :])
-        return torch.cat(result, dim=0)
+            f = h5py.File(self.dataset_metadata[i]["file_path"], 'r')
+            agentview_chunk = f["data"][self.dataset_metadata[i]["demo_name"]]['obs']['agentview_rgb'][:T]
+            result.append(agentview_chunk)
+            f.close()
+            
+        return torch.from_numpy(np.concatenate(result, axis=0))
 
     def __len__(self):
         return len(self.slices)
@@ -205,13 +172,17 @@ class LiberoDataset():
 
         task_emb = self.data_embs[i]
 
-        agentview_rgb = self.agentview_rgb[i][start:start+1]
-        eye_in_hand_rgb = self.eye_in_hand_rgb[i][start:start+1]
-
         robot_states = self.all_states[i][start:start+1]
 
         # Keep on CPU; device transfer handled in training loop
         task_emb = task_emb.float() if isinstance(task_emb, torch.Tensor) else torch.tensor(task_emb, dtype=torch.float32)
+
+        # Lazy load image arrays directly from HDF5 based on metadata
+        meta = self.dataset_metadata[i]
+        with h5py.File(meta["file_path"], 'r') as f:
+            demo_data = f["data"][meta["demo_name"]]['obs']
+            agentview_rgb = demo_data['agentview_rgb'][start:start+1]
+            eye_in_hand_rgb = demo_data['eye_in_hand_rgb'][start:start+1]
 
         agentview_rgb = torch.from_numpy(agentview_rgb).float().permute(0, 3, 1, 2) / 255.
         eye_in_hand_rgb = torch.from_numpy(eye_in_hand_rgb).float().permute(0, 3, 1, 2) / 255.

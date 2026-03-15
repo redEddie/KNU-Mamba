@@ -23,7 +23,7 @@ CAMERA_NAMES = ["agentview", "eye_in_hand"]
 @dataclass
 class WandbConfig:
     """Wandb configuration."""
-    entity: str = "sainavaneet"
+    entity: str = "chanwook"
     project: str = "MambaVLA"
 
 
@@ -165,12 +165,13 @@ class DataLoadingConfig:
     train_batch_size: int = 256
     val_batch_size: int = 256
     num_workers: int = 4
+    prefetch_factor: int = 2  # Prefetch 2 batches per worker
 
 
 @dataclass
 class TrainingConfig:
     """Training process configuration."""
-    epoch: int = 10
+    epoch: int = 500
     perception_seq_len: int = perception_seq_len
     eval_every_n_epochs: int = 5
     save_every_n_epochs: int = 10
@@ -215,6 +216,10 @@ class TrainerConfig:
         return self.data_loading.num_workers
     
     @property
+    def prefetch_factor(self) -> int:
+        return self.data_loading.prefetch_factor
+    
+    @property
     def epoch(self) -> int:
         return self.training.epoch
     
@@ -256,7 +261,7 @@ class DatasetConfig:
     # Note: benchmark_type is not passed to LiberoDataset, it's extracted from data_directory
     benchmark_type: str = "libero_object"  # Used for path construction
     demos_per_task: int = 50
-    dataset_path: str = "/home/navaneet/LIBERO/libero/datasets/"
+    dataset_path: str = "/Data1/pilab.cache/"
     perception_seq_len: int = perception_seq_len
     action_seq_len: int = action_seq_len
     multistep: int = 10
@@ -269,7 +274,7 @@ class DatasetConfig:
     obs_dim: int = 9
     action_dim: int = ACTION_DIM
     state_dim: int = STATE_DIM
-    max_len_data: int = 347
+    max_len_data: int = 600
     consider_robot_states: bool = consider_robot_states
     camera_names: List[str] = field(default_factory=lambda: CAMERA_NAMES)
     shape_meta: ShapeMetaConfig = field(default_factory=ShapeMetaConfig)
@@ -285,7 +290,7 @@ class DatasetConfig:
 class SimulationConfig:
     """Simulation configuration."""
     _target_: str = "MambaVLA.benchmark.libero.libero_sim.LiberoSim"
-    rollouts: int = 1
+    rollouts: int = 20
     max_step_per_episode: int = 600
     benchmark_type: str = DatasetConfig.benchmark_type
     use_eye_in_hand: bool = False
@@ -295,7 +300,7 @@ class SimulationConfig:
     n_cores: int = 2
     use_multiprocessing: bool = False
     save_video: bool = True
-    save_video_dir: str = '/home/navaneet/MambaVLA_evaluation/videos/'
+    save_video_dir: str = 'runs/videos/'
 
 @dataclass
 class MainConfig:
@@ -324,8 +329,9 @@ class MainConfig:
     train_batch_size: int = 256
     val_batch_size: int = 256
     num_workers: int = 4
+    prefetch_factor: int = 2
     device: str = DEVICE
-    epoch: int = 1
+    epoch: int = 500
     eval_every_n_epochs: int = 1
     scale_data: bool = True
     scaling_type: str = "minmax"
@@ -334,7 +340,7 @@ class MainConfig:
     obs_dim: int = 9
     action_dim: int = ACTION_DIM
     state_dim: int = STATE_DIM
-    max_len_data: int = 260
+    max_len_data: int = 600
     
     # Observations
     consider_robot_states: bool = consider_robot_states
@@ -377,7 +383,7 @@ def create_libero_object_config() -> MainConfig:
     """Create configuration for libero_object task suite."""
     config = MainConfig()
     config.dataset.benchmark_type = "libero_object"
-    config.dataset.dataset_path = "/home/navaneet/LIBERO/libero/datasets/libero_object"
+    config.dataset.dataset_path = "/Data1/pilab.cache/libero_object"
     return config
 
 
@@ -385,7 +391,7 @@ def create_libero_spatial_config() -> MainConfig:
     """Create configuration for libero_spatial task suite."""
     config = MainConfig()
     config.dataset.benchmark_type = "libero_spatial"
-    config.dataset.dataset_path = "/home/navaneet/LIBERO/libero/datasets/libero_spatial"
+    config.dataset.dataset_path = "/Data1/pilab.cache/libero_spatial"
     return config
 
 
@@ -393,7 +399,7 @@ def create_libero_goal_config() -> MainConfig:
     """Create configuration for libero_goal task suite."""
     config = MainConfig()
     config.dataset.benchmark_type = "libero_goal"
-    config.dataset.dataset_path = "/home/navaneet/LIBERO/libero/datasets/libero_goal"
+    config.dataset.dataset_path = "/Data1/pilab.cache/libero_goal"
 
     return config
 
@@ -401,6 +407,6 @@ def create_libero_90_config() -> MainConfig:
     """Create configuration for libero_90 task suite."""
     config = MainConfig()
     config.dataset.benchmark_type = "libero_90"
-    config.dataset.dataset_path = "/home/navaneet/LIBERO/libero/datasets/libero_90"
+    config.dataset.dataset_path = "/Data1/pilab.cache/libero_90"
 
     return config

@@ -47,31 +47,33 @@ class Trainer:
             observation_sequence_length: int = 1,
             ema_decay_rate: float = 0.999,
             enable_ema: bool = False,
-            checkpoint_frequency: int = 10
+            checkpoint_frequency: int = 10,
+            resume_checkpoint_path: str = None
     ):
         """Initialize."""
-        
+
         # Dataset and data loading configuration
         self.trainset = training_dataset
         self.valset = validation_dataset
         self.train_batch_size = training_batch_size
         self.val_batch_size = validation_batch_size
         self.num_workers = dataloader_workers
-        
+
         # Training configuration
         self.epoch = total_epochs
         self.perception_seq_len = observation_sequence_length
         self.eval_every_n_epochs = evaluation_frequency
         self.save_every_n_epochs = checkpoint_frequency
-        
+        self.resume_checkpoint_path = resume_checkpoint_path
+
         # Device and environment configuration
         self.device = device
         self.working_dir = os.getcwd()
-        
+
         # Data scaling configuration
         self.scale_data = enable_data_scaling
         self.scaling_type = data_scaler_type
-        
+
         # EMA configuration
         self.decay_ema = ema_decay_rate
         self.if_use_ema = enable_ema
@@ -133,12 +135,19 @@ class Trainer:
         else:
             self.optimizer = model.configure_optimizers()
 
+        # Resume from checkpoint if available
+        self.start_epoch = 0
+        if self.resume_checkpoint_path is not None:
+            self.start_epoch = self._load_resume_checkpoint(model)
+            log.info(f"Resumed from epoch {self.start_epoch}")
+
     def _run_training_loop(self, model):
         """Execute the main training loop over all epochs."""
-        for num_epoch in tqdm(range(self.epoch), desc="Epochs", dynamic_ncols=True):
+        for num_epoch in tqdm(range(self.start_epoch, self.epoch), desc="Epochs", dynamic_ncols=True):
             epoch_loss = self._train_single_epoch(model, num_epoch)
             self._log_epoch_results(num_epoch, epoch_loss)
             self._save_checkpoint_if_needed(model, num_epoch)
+            self._save_resume_checkpoint(model, num_epoch)
 
     def _train_single_epoch(self, model, num_epoch):
         """Train for a single epoch and return the average loss."""
@@ -182,6 +191,31 @@ class Trainer:
                 model.store_model_weights(self.working_dir, sv_name=f"epoch_{num_epoch + 1:05d}")
             except Exception as e:
                 log.warning(f"Failed to save checkpoint at epoch {num_epoch + 1}: {e}")
+
+    def _save_resume_checkpoint(self, model, num_epoch):
+        """Save full training state for resuming (overwritten every epoch)."""
+        resume_path = os.path.join(self.working_dir, "resume_last.pth")
+        checkpoint = {
+            'epoch': num_epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }
+        if self.if_use_ema:
+            checkpoint['ema_state_dict'] = self.ema_helper.state_dict()
+        if model.use_lr_scheduler:
+            checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
+        torch.save(checkpoint, resume_path)
+
+    def _load_resume_checkpoint(self, model):
+        """Load full training state from resume checkpoint. Returns start epoch."""
+        checkpoint = torch.load(self.resume_checkpoint_path, weights_only=False)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if self.if_use_ema and 'ema_state_dict' in checkpoint:
+            self.ema_helper.load_state_dict(checkpoint['ema_state_dict'])
+        if model.use_lr_scheduler and 'scheduler_state_dict' in checkpoint:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        return checkpoint['epoch']
 
     def _finalize_training(self, model):
         """Finalize training by applying EMA and saving final model."""

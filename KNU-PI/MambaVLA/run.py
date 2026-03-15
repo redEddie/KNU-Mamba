@@ -22,10 +22,17 @@ except RuntimeError:
 
 import os
 os.environ['NUMEXPR_MAX_THREADS'] = '64'
-# Add the current directory to Python path
+# Add the current directory and the LIBERO package directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+if "/Data/pilab/LIBERO" not in sys.path:
+    sys.path.insert(0, "/Data/pilab/LIBERO")
 
-from configs.config import create_config, create_libero_object_config, create_libero_spatial_config, create_libero_goal_config
+# Also set PYTHONPATH for multiprocessing children
+current_pythonpath = os.environ.get('PYTHONPATH', '')
+if "/Data/pilab/LIBERO" not in current_pythonpath:
+    os.environ['PYTHONPATH'] = "/Data/pilab/LIBERO" + (f":{current_pythonpath}" if current_pythonpath else "")
+
+from configs.config import create_config, create_libero_object_config, create_libero_spatial_config, create_libero_goal_config, create_libero_90_config
 from configs.factory import create_model, create_trainer, create_simulation
 
 # Set up logging
@@ -41,7 +48,7 @@ def set_seed_everywhere(seed):
     random.seed(seed)
 
 
-def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = None) -> None:
+def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = None, resume_path: str | None = None) -> None:
     """
     Main training function.
     
@@ -56,11 +63,21 @@ def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = No
         cfg = create_libero_spatial_config()
     elif benchmark_type == "libero_goal":
         cfg = create_libero_goal_config()
+    elif benchmark_type == "libero_90":
+        cfg = create_libero_90_config()
     else:
         cfg = create_config()
     
     set_seed_everywhere(cfg.seed)
     
+    # Determine job type for wandb
+    if checkpoint_path is not None:
+        job_type = "eval"
+    elif resume_path is not None:
+        job_type = "train"
+    else:
+        job_type = "train"
+
     # Initialize wandb logger
     wandb_config = {
         "project": cfg.wandb.project,
@@ -68,6 +85,7 @@ def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = No
         "group": cfg.group,
         "seed": cfg.seed,
         "benchmark_type": cfg.dataset.benchmark_type,
+        "job_type": job_type,
         "demos_per_task": cfg.dataset.demos_per_task,
         "chunck_size": cfg.chunck_size,
         "perception_seq_len": cfg.perception_seq_len,
@@ -80,29 +98,35 @@ def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = No
         "action_dim": cfg.action_dim,
         "state_dim": cfg.state_dim,
     }
-    
+
     run = wandb.init(
         project=cfg.wandb.project,
         entity=cfg.wandb.entity,
         group=cfg.group,
+        job_type=job_type,
         config=wandb_config
     )
     
-    # Create output directory structure: runs/<benchmark_type>/<YYYYMMDD>/<HHMMSS>/
-    import datetime
-    now = datetime.datetime.now()
-    date_dir = now.strftime("%Y-%m-%d")
-    time_dir = now.strftime("%H-%M-%S")
-    output_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
-    run_output_dir = os.path.join(output_root, cfg.dataset.benchmark_type, date_dir, time_dir)
+    # Determine output directory
+    if resume_path is not None:
+        # Resume: use the directory containing the resume checkpoint
+        run_output_dir = os.path.dirname(os.path.abspath(resume_path))
+    else:
+        # New run: create fresh directory
+        import datetime
+        now = datetime.datetime.now()
+        date_dir = now.strftime("%Y-%m-%d")
+        time_dir = now.strftime("%H-%M-%S")
+        output_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
+        run_output_dir = os.path.join(output_root, cfg.dataset.benchmark_type, date_dir, time_dir)
     os.makedirs(run_output_dir, exist_ok=True)
 
     # Create model and set its working_dir to the run-specific directory
     model = create_model(cfg)
     model.working_dir = run_output_dir
-    
+
     # Create trainer and set its working_dir as well
-    trainer = create_trainer(cfg)
+    trainer = create_trainer(cfg, resume_checkpoint_path=resume_path)
     trainer.working_dir = run_output_dir
     
     # Get model parameters for logging
@@ -157,7 +181,7 @@ if __name__ == "__main__":
         "--benchmark_type", 
         type=str, 
         default="libero_object",
-        choices=["libero_object", "libero_spatial", "libero_goal"],
+        choices=["libero_object", "libero_spatial", "libero_goal", "libero_90"],
         help="Task suite to use for training"
     )
     parser.add_argument(
@@ -166,6 +190,12 @@ if __name__ == "__main__":
         default=None,
         help="Path to checkpoint (.pth file or directory). If provided, skips training and evaluates with this checkpoint."
     )
-    
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to resume_last.pth to resume training from."
+    )
+
     args = parser.parse_args()
-    main(args.benchmark_type, args.checkpoint_path)
+    main(args.benchmark_type, args.checkpoint_path, args.resume)
