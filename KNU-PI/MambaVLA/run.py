@@ -32,7 +32,7 @@ current_pythonpath = os.environ.get('PYTHONPATH', '')
 if "/Data/pilab/LIBERO" not in current_pythonpath:
     os.environ['PYTHONPATH'] = "/Data/pilab/LIBERO" + (f":{current_pythonpath}" if current_pythonpath else "")
 
-from configs.config import create_config, create_libero_object_config, create_libero_spatial_config, create_libero_goal_config, create_libero_90_config
+from configs.config import create_config, create_libero_object_config, create_libero_spatial_config, create_libero_goal_config, create_libero_90_config, create_libero_10_config
 from configs.factory import create_model, create_trainer, create_simulation
 
 # Set up logging
@@ -65,6 +65,8 @@ def main(benchmark_type: str = "libero_object", checkpoint_path: str | None = No
         cfg = create_libero_goal_config()
     elif benchmark_type == "libero_90":
         cfg = create_libero_90_config()
+    elif benchmark_type == "libero_10":
+        cfg = create_libero_10_config()
     else:
         cfg = create_config()
     
@@ -181,7 +183,7 @@ if __name__ == "__main__":
         "--benchmark_type", 
         type=str, 
         default="libero_object",
-        choices=["libero_object", "libero_spatial", "libero_goal", "libero_90"],
+        choices=["libero_object", "libero_spatial", "libero_goal", "libero_90", "libero_10"],
         help="Task suite to use for training"
     )
     parser.add_argument(

@@ -23,6 +23,7 @@ CUDA_VISIBLE_DEVICES=0 python run.py --benchmark_type libero_object
 CUDA_VISIBLE_DEVICES=1 python run.py --benchmark_type libero_spatial
 CUDA_VISIBLE_DEVICES=2 python run.py --benchmark_type libero_goal
 CUDA_VISIBLE_DEVICES=3 python run.py --benchmark_type libero_90
+CUDA_VISIBLE_DEVICES=3 python run.py --benchmark_type libero_10
 ```
 
 ## Evaluate
@@ -32,6 +33,15 @@ CUDA_VISIBLE_DEVICES=0 python run.py --benchmark_type libero_object --checkpoint
 CUDA_VISIBLE_DEVICES=1 python run.py --benchmark_type libero_spatial --checkpoint_path runs/libero_spatial/<date>/<time>/final_model.pth
 CUDA_VISIBLE_DEVICES=2 python run.py --benchmark_type libero_goal --checkpoint_path runs/libero_goal/<date>/<time>/final_model.pth
 CUDA_VISIBLE_DEVICES=3 python run.py --benchmark_type libero_90 --checkpoint_path runs/libero_90/<date>/<time>/final_model.pth
+CUDA_VISIBLE_DEVICES=4 python run.py --benchmark_type libero_10 --checkpoint_path runs/libero_10/<date>/<time>/final_model.pth
+```
+
+## Cross-suite Evaluate (libero_90 → libero_10)
+
+libero_10은 libero_90 task의 multi-step 조합이므로, libero_90에서 학습한 모델로 평가 가능:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python run.py --benchmark_type libero_10 --checkpoint_path runs/libero_90/<date>/<time>/final_model.pth
 ```
 
 ## Resume (libero_90)

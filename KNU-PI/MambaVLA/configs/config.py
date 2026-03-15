@@ -410,3 +410,11 @@ def create_libero_90_config() -> MainConfig:
     config.dataset.dataset_path = "/Data1/pilab.cache/libero_90"
 
     return config
+
+def create_libero_10_config() -> MainConfig:
+    """Create configuration for libero_10 task suite."""
+    config = MainConfig()
+    config.dataset.benchmark_type = "libero_10"
+    config.dataset.dataset_path = "/Data1/pilab.cache/libero_10"
+
+    return config
